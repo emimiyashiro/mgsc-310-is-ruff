@@ -1,0 +1,267 @@
+---
+title: "Summary Statistics"
+author: "Shannon Coakley, Jessica Miyasato, and Emily Miyashiro"
+subtitle: MGSC 310 Final Project 
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+---
+
+```{r setup, include=FALSE}
+
+# Please leave this code chunk as is. It makes some slight formatting changes to alter the output to be more aesthetically pleasing. 
+
+library(knitr)
+
+# Change the number in set seed to your own favorite number
+set.seed(1818)
+options(width=70)
+options(scipen=99)
+
+
+# this sets text outputted in code chunks to small
+opts_chunk$set(tidy.opts=list(width.wrap=50),tidy=TRUE, size = "vsmall")  
+opts_chunk$set(message = FALSE,                                          
+               warning = FALSE,
+               # "caching" stores objects in code chunks and only rewrites if you change things
+               cache = FALSE,                               
+               # automatically downloads dependency files
+               autodep = TRUE,
+               # 
+               cache.comments = FALSE,
+               # 
+               collapse = TRUE,
+               # change fig.width and fig.height to change the code height and width by default
+               fig.width = 5.5,  
+               fig.height = 4.5,
+               fig.align='center')
+
+
+```
+
+```{r setup-2}
+
+# Always print this out before your assignment
+sessionInfo()
+getwd()
+
+```
+
+
+<!-- ### start answering your problem set here -->
+<!-- You may export your homework in either html or pdf, with the former usually being easier. 
+     To export or compile your Rmd file: click above on 'Knit' then 'Knit to HTML' -->
+<!-- Be sure to submit both your .Rmd file and the compiled .html or .pdf file for full credit -->
+
+
+```{r setup-3}
+
+# load all your libraries in this chunk 
+library('tidyverse')
+library(partykit)
+library(tidyverse)
+library(PerformanceAnalytics)
+library(rpart)       
+library(rpart.plot)  
+library('randomForest')
+library(rpart)       
+library(rpart.plot)  
+library("dplyr")
+library("forcats")
+library("readr")
+library("purrr")
+# note, do not run install.packages() inside a code chunk. install them in the console outside of a code chunk. 
+
+```
+
+
+
+## Part 1: Importing and Cleaning the Data
+
+Step 1) Import the Data 
+
+```{r}
+
+# code for step 1
+adogs1 <- read_csv("datasets/pet-adoption.csv")
+
+```
+
+
+Step 2) Clean the Data: One Observation per cell
+
+```{r}
+
+# code for step 2
+
+#To make variable "p1_breed"
+adogs1[c('primary_breed', 'other_breeds')] <- str_split_fixed(adogs1$breeds, ',', 2)
+adogs1[c('p','p1_breed' )] <- str_split_fixed(adogs1$primary_breed, ':', 2)
+adogs1$p1_breed<- gsub("'","",adogs1$p1_breed)
+adogs1[c('breed', 'breed_other')] <- str_split_fixed(adogs1$p1_breed, '/', 2)
+
+#To make variable "p1_color"
+adogs1[c('primary_color', 'other_colors')] <- str_split_fixed(adogs1$colors, ',', 2)
+adogs1$primary_color<-gsub("'","",adogs1$primary_color)
+adogs1[c('p1','p1_color' )] <- str_split_fixed(adogs1$primary_color, ':', 2)
+adogs1[c('c', 'c_other')] <- str_split_fixed(adogs1$p1_color, '/', 2)
+adogs1[c('color', 'c1_other')] <- str_split_fixed(as.character(adogs1$c), '\\s*\\(|\\)', 2)
+
+#To make variable "neutered"
+adogs1[c('spayed_n', 'other')] <- str_split_fixed(adogs1$attributes, ',', 2)
+adogs1[c('n','neutered' )] <- str_split_fixed(adogs1$spayed_n, ':', 2)
+adogs1$neutered<-gsub("'","",adogs1$neutered)
+
+view(adogs1)
+
+```
+
+Step 3) Factor Necessary Variables
+
+It looks like all the variables we are using need to be factored (age, gender, color, breed, coat, size, and neutered). 
+
+
+```{r}
+
+# code for step 3
+
+
+glimpse(adogs1)
+
+adogs1 <-
+  adogs1 %>% 
+  mutate(age = as.factor(age),
+         gender = as.factor(gender),
+         color = as.factor(color),
+         breed = as.factor(breed),
+         coat = as.factor(coat),
+         size = as.factor(size),
+         neutered = as.factor(neutered),
+         adopted = as.factor(status))
+
+#Now I am going to check the levels of each to make sure they're good
+
+levels(adogs1$age)
+levels(adogs1$gender)
+levels(adogs1$color) #need to clean colors more
+levels(adogs1$breed) #there are 90 factors for breed. should bring down
+levels(adogs1$coat)
+levels(adogs1$size)
+levels(adogs1$neutered)
+levels(adogs1$adopted)
+
+#There are 90 factors for breed, I am going to make this the top 20. 
+
+adogs1 <-
+  adogs1 %>% 
+  mutate(breed = fct_lump_n(breed, n = 12),
+              color = fct_lump_n(color, n = 6),
+         adopted = fct_recode(adopted,
+                              "not adopted" = "adoptable",
+                              "adopted" = "adopted"))
+
+
+levels(adogs1$breed)
+levels(adogs1$color)
+
+
+```
+
+Step 4) Split into Test and Training Sets
+
+```{r}
+
+#code for step 4
+
+library('rsample')
+adogs1_split <- initial_split(adogs1)
+adogs1_train <- training(adogs1_split)
+adogs1_test <- testing(adogs1_split)
+
+```
+
+
+## Summary Statistics
+
+
+```{r}
+
+#code for sumamry statistics 
+
+library("vtable")
+
+sumtable(adogs1)
+
+
+```
+
+
+
+## Summary Plots
+
+
+Plot 1)
+
+```{r}
+
+# code for plot 1
+library("ggplot2")
+library("ggridges")
+
+ggplot(adogs1, aes(age)) +
+  geom_bar(fill = "light blue") +
+  geom_text(aes(label = ..count..), stat = "count", vjust = -.1) +
+  ggtitle("Number of Dogs in Shelter by Age") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(x = "Age", y = "Count")
+
+```
+
+
+Plot 2)
+
+```{r}
+
+#code for plot 2
+counts <- table(adogs1$adopted, adogs1$gender)
+mosaicplot(counts, xlab='Status', ylab='Gender',main='Adoptable Dogs by Gender', col='light blue') 
+   
+```
+
+
+Plot 3)
+
+```{r}
+
+#code for plot 3
+ggplot(adogs1, aes(adopted)) +
+  geom_bar(fill = "light blue") +
+  geom_text(aes(label = ..count..), stat = "count",  vjust = -0.1) +
+  ggtitle("Number of Dogs Adopted") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(x = "Adoption Status", y = "Count")
+
+```
+
+
+Plot 4)
+
+```{r}
+
+#code for plot 4
+
+ggplot(adogs1, aes(breed)) +
+  theme(axis.text.x = element_text(angle = 30)) +
+   geom_bar(fill = "light blue") +
+   geom_text(aes(label = ..count..), stat = "count", vjust = -0.1) +
+   ggtitle("Number of Dogs in Shelter by Breed") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(x = "Breed", y = "Count")
+ 
+
+```
+
+
+
+
